@@ -16,7 +16,10 @@ if (!window.THREE) {
       this.width = config.width;
       this.height = config.height;
       this.frontTexturePath = config.frontTexturePath;
-      this.backColor = config.backColor;
+      this.backColor = config.backColor || null;
+      this.backTexturePath = config.backTexturePath || null;
+      this.hasThickness = config.hasThickness || false;
+      this.thickness = 0.05;
       
       // State
       this.isFrontFacing = true;
@@ -41,44 +44,100 @@ if (!window.THREE) {
     load(textureLoader) {
       return new Promise((resolve, reject) => {
         console.log('Loading card', this.index, 'from', this.frontTexturePath);
+        
+        // Load front texture first
         textureLoader.load(
           this.frontTexturePath,
           (frontTexture) => {
-            console.log('Card', this.index, 'texture loaded successfully');
-          const geometry = new THREE.PlaneGeometry(this.width, this.height);
-          
-          // Create front material
-          const frontMaterial = new THREE.MeshBasicMaterial({
-            map: frontTexture,
-            transparent: true,
-            alphaTest: 0.5,
-            depthWrite: true
-          });
-          
-          // Create back material from solid color
-          const backTexture = this.createSolidColorTexture(this.backColor);
-          const backMaterial = new THREE.MeshBasicMaterial({
-            map: backTexture,
-            transparent: true,
-            alphaTest: 0.5,
-            depthWrite: true
-          });
-          
-          // Create meshes
-          this.frontMesh = new THREE.Mesh(geometry, frontMaterial);
-          this.group.add(this.frontMesh);
-          
-          this.backMesh = new THREE.Mesh(geometry, backMaterial);
-          this.backMesh.rotation.y = Math.PI;
-          this.backMesh.position.z = -0.02;
-          this.group.add(this.backMesh);
-          
-          // Set render order
-          this.group.renderOrder = this.index;
-          
-          this.isLoaded = true;
-          console.log('Card', this.index, 'meshes created, group children:', this.group.children.length);
-          resolve(this);
+            console.log('Card', this.index, 'front texture loaded successfully');
+            
+            // Function to complete card creation once we have back texture/material
+            const createCard = (backMaterial, backTexture) => {
+              const geometry = new THREE.PlaneGeometry(this.width, this.height);
+              
+              // Create front material
+              const frontMaterial = new THREE.MeshStandardMaterial({
+                map: frontTexture,
+                transparent: true,
+                alphaTest: 0.5,
+                depthWrite: true
+              });
+              
+              // Custom depth material for alpha-aware shadows on front
+              const frontDepthMaterial = new THREE.MeshDepthMaterial({
+                depthPacking: THREE.RGBADepthPacking,
+                map: frontTexture,
+                alphaTest: 0.5
+              });
+              
+              // Create meshes
+              this.frontMesh = new THREE.Mesh(geometry, frontMaterial);
+              this.frontMesh.castShadow = true;
+              this.frontMesh.receiveShadow = true;
+              this.frontMesh.customDepthMaterial = frontDepthMaterial;
+              this.frontMesh.position.z = this.hasThickness ? this.thickness / 2 : 0;
+              this.group.add(this.frontMesh);
+              
+              this.backMesh = new THREE.Mesh(geometry, backMaterial);
+              this.backMesh.castShadow = true;
+              this.backMesh.receiveShadow = true;
+              // Add custom depth material for back if it has a texture with alpha
+              if (backTexture) {
+                const backDepthMaterial = new THREE.MeshDepthMaterial({
+                  depthPacking: THREE.RGBADepthPacking,
+                  map: backTexture,
+                  alphaTest: 0.5
+                });
+                this.backMesh.customDepthMaterial = backDepthMaterial;
+              }
+              this.backMesh.rotation.y = Math.PI;
+              this.backMesh.position.z = this.hasThickness ? -this.thickness / 2 : -0.02;
+              this.group.add(this.backMesh);
+              
+              // Add thickness edges if needed
+              if (this.hasThickness && this.backColor) {
+                this.addEdges();
+              }
+              
+              // Set render order
+              this.group.renderOrder = this.index;
+              
+              this.isLoaded = true;
+              console.log('Card', this.index, 'meshes created, group children:', this.group.children.length);
+              resolve(this);
+            };
+            
+            // Load back texture or use solid color
+            if (this.backTexturePath) {
+              textureLoader.load(
+                this.backTexturePath,
+                (backTexture) => {
+                  console.log('Card', this.index, 'back texture loaded');
+                  const backMaterial = new THREE.MeshStandardMaterial({
+                    map: backTexture,
+                    transparent: true,
+                    alphaTest: 0.5,
+                    depthWrite: true
+                  });
+                  createCard(backMaterial, backTexture);
+                },
+                undefined,
+                (error) => {
+                  console.error('Failed to load back texture for card', this.index, ':', error);
+                  reject(error);
+                }
+              );
+            } else {
+              // Use solid color
+              const backTexture = this.createSolidColorTexture(this.backColor);
+              const backMaterial = new THREE.MeshStandardMaterial({
+                map: backTexture,
+                transparent: true,
+                alphaTest: 0.5,
+                depthWrite: true
+              });
+              createCard(backMaterial, null);
+            }
           },
           undefined,
           (error) => {
@@ -87,6 +146,36 @@ if (!window.THREE) {
           }
         );
       });
+    }
+    
+    addEdges() {
+      const edgeMaterial = new THREE.MeshStandardMaterial({ color: this.backColor });
+      
+      // Top edge
+      const topGeom = new THREE.BoxGeometry(this.width, this.thickness, this.thickness);
+      const topEdge = new THREE.Mesh(topGeom, edgeMaterial);
+      topEdge.position.set(0, this.height / 2, 0);
+      topEdge.castShadow = true;
+      this.group.add(topEdge);
+      
+      // Bottom edge
+      const bottomEdge = new THREE.Mesh(topGeom, edgeMaterial);
+      bottomEdge.position.set(0, -this.height / 2, 0);
+      bottomEdge.castShadow = true;
+      this.group.add(bottomEdge);
+      
+      // Left edge
+      const sideGeom = new THREE.BoxGeometry(this.thickness, this.height, this.thickness);
+      const leftEdge = new THREE.Mesh(sideGeom, edgeMaterial);
+      leftEdge.position.set(-this.width / 2, 0, 0);
+      leftEdge.castShadow = true;
+      this.group.add(leftEdge);
+      
+      // Right edge
+      const rightEdge = new THREE.Mesh(sideGeom, edgeMaterial);
+      rightEdge.position.set(this.width / 2, 0, 0);
+      rightEdge.castShadow = true;
+      this.group.add(rightEdge);
     }
     
     createSolidColorTexture(hexColor) {
@@ -298,9 +387,36 @@ if (!window.THREE) {
       
       this.renderer = new THREE.WebGLRenderer({ canvas: canvas });
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.renderer.setClearColor(0xf5f5dc);
+      this.renderer.setClearColor(0xd4c4a8);  // More brown background
       this.renderer.setClearAlpha(1);
       this.renderer.sortObjects = true;
+      this.renderer.shadowMap.enabled = true;
+      this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      
+      // Add lighting for shadows
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      this.scene.add(ambientLight);
+      
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      directionalLight.position.set(5, 10, 7);
+      directionalLight.castShadow = true;
+      directionalLight.shadow.mapSize.width = 2048;
+      directionalLight.shadow.mapSize.height = 2048;
+      directionalLight.shadow.camera.near = 0.5;
+      directionalLight.shadow.camera.far = 50;
+      directionalLight.shadow.camera.left = -10;
+      directionalLight.shadow.camera.right = 10;
+      directionalLight.shadow.camera.top = 10;
+      directionalLight.shadow.camera.bottom = -10;
+      this.scene.add(directionalLight);
+      
+      // Add a plane to receive shadows
+      const shadowPlaneGeom = new THREE.PlaneGeometry(50, 50);
+      const shadowPlaneMat = new THREE.ShadowMaterial({ opacity: 0.3 });
+      const shadowPlane = new THREE.Mesh(shadowPlaneGeom, shadowPlaneMat);
+      shadowPlane.position.z = -5;
+      shadowPlane.receiveShadow = true;
+      this.scene.add(shadowPlane);
       
       console.log('Renderer created, size:', window.innerWidth, 'x', window.innerHeight);
       
@@ -389,7 +505,9 @@ if (!window.THREE) {
           width: config.width,
           height: config.height,
           frontTexturePath: config.front,
-          backColor: config.backColor
+          backTexturePath: config.back || null,
+          backColor: config.backColor || null,
+          hasThickness: config.hasThickness || false
         });
         return card.load(this.textureLoader);
       });
@@ -449,11 +567,11 @@ if (!window.THREE) {
   
   // Card configurations
   const cardConfigs = [
-    { front: 'assets/cards/card1-front.png', backColor: '#f5f5dc', width: 3, height: 3 },
-    { front: 'assets/cards/card2-front-1.png', backColor: '#f5f5dc', width: 3, height: 3 },
-    { front: 'assets/cards/card3-front.png', backColor: '#fbf9f1', width: 3.49, height: 3.49 },
-    { front: 'assets/cards/card4-front.png', backColor: '#ffffff', width: 3.82, height: 3.82 },
-    { front: 'assets/cards/card5-front.png', backColor: '#ffcb87', width: 4.03, height: 5.73 }
+    { front: 'assets/cards/card1-front.png', back: 'assets/cards/card1-back.png', width: 3, height: 3 },
+    { front: 'assets/cards/card2-front-1.png', back: 'assets/cards/card2-back-1.png', width: 3, height: 3 },
+    { front: 'assets/cards/card3-front.png', backColor: '#fbf9f1', width: 3.49, height: 3.49, hasThickness: true },
+    { front: 'assets/cards/card4-front.png', backColor: '#ffffff', width: 3.82, height: 3.82, hasThickness: true },
+    { front: 'assets/cards/card5-front.png', backColor: '#ffcb87', width: 4.03, height: 5.73, hasThickness: true }
   ];
   
   // Load cards and start
