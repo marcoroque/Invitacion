@@ -19,6 +19,7 @@ if (!window.THREE) {
       this.backColor = config.backColor || null;
       this.backTexturePath = config.backTexturePath || null;
       this.hasThickness = config.hasThickness || false;
+      this.edgeColor = config.edgeColor || null;  // For layered wavy edges
       this.thickness = 0.05;
       
       // State
@@ -99,6 +100,11 @@ if (!window.THREE) {
                 this.addEdges();
               }
               
+              // Add layered edge effect for cards with wavy/transparent edges (no backColor defined)
+              if (this.hasThickness && !this.backColor && this.edgeColor) {
+                this.addLayeredEdges(frontTexture);
+              }
+              
               // Set render order
               this.group.renderOrder = this.index;
               
@@ -176,6 +182,33 @@ if (!window.THREE) {
       rightEdge.position.set(this.width / 2, 0, 0);
       rightEdge.castShadow = true;
       this.group.add(rightEdge);
+    }
+    
+    addLayeredEdges(frontTexture) {
+      // Create multiple layered planes between front and back to simulate thickness
+      // These use the front texture's alpha to maintain the wavy edge
+      const geometry = new THREE.PlaneGeometry(this.width, this.height);
+      const numLayers = 4;
+      
+      for (let i = 0; i < numLayers; i++) {
+        // Calculate z position between front and back
+        const t = (i + 1) / (numLayers + 1);
+        const z = this.thickness / 2 - t * this.thickness;
+        
+        // Create edge layer with the edge color, using front texture alpha as mask
+        const layerMaterial = new THREE.MeshStandardMaterial({
+          color: this.edgeColor,
+          map: frontTexture,  // Use for alpha mask
+          transparent: true,
+          alphaTest: 0.5,
+          depthWrite: true
+        });
+        
+        const layer = new THREE.Mesh(geometry, layerMaterial);
+        layer.position.z = z;
+        layer.castShadow = true;
+        this.group.add(layer);
+      }
     }
     
     createSolidColorTexture(hexColor) {
@@ -507,7 +540,8 @@ if (!window.THREE) {
           frontTexturePath: config.front,
           backTexturePath: config.back || null,
           backColor: config.backColor || null,
-          hasThickness: config.hasThickness || false
+          hasThickness: config.hasThickness || false,
+          edgeColor: config.edgeColor || null
         });
         return card.load(this.textureLoader);
       });
@@ -567,7 +601,7 @@ if (!window.THREE) {
   
   // Card configurations
   const cardConfigs = [
-    { front: 'assets/cards/card1-front.png', back: 'assets/cards/card1-back.png', width: 3, height: 3 },
+    { front: 'assets/cards/card1-front.png', back: 'assets/cards/card1-back.png', width: 3, height: 3, hasThickness: true, edgeColor: '#f5f5dc' },
     { front: 'assets/cards/card2-front-1.png', back: 'assets/cards/card2-back-1.png', width: 3, height: 3 },
     { front: 'assets/cards/card3-front.png', backColor: '#fbf9f1', width: 3.49, height: 3.49, hasThickness: true },
     { front: 'assets/cards/card4-front.png', backColor: '#ffffff', width: 3.82, height: 3.82, hasThickness: true },
