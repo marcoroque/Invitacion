@@ -1,0 +1,12 @@
+{
+  "name": "invitacion-3d",
+  "version": "1.0.0",
+  "description": "3D card stack invitation",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "http-server": "^14.1.1"
+  }
+}
