@@ -449,11 +449,11 @@ if (!window.THREE) {
       this.maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
       console.log('Max anisotropy:', this.maxAnisotropy);
       
-      // Add lighting for shadows
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+      // Add lighting - softer, more ambient
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
       this.scene.add(ambientLight);
       
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 0.4);
       directionalLight.position.set(5, 10, 7);
       directionalLight.castShadow = true;
       directionalLight.shadow.mapSize.width = 4096;
@@ -464,11 +464,13 @@ if (!window.THREE) {
       directionalLight.shadow.camera.right = 10;
       directionalLight.shadow.camera.top = 10;
       directionalLight.shadow.camera.bottom = -10;
+      directionalLight.shadow.radius = 4;  // Softer shadow edges
+      directionalLight.shadow.bias = -0.0005;
       this.scene.add(directionalLight);
       
       // Add a plane to receive shadows
       const shadowPlaneGeom = new THREE.PlaneGeometry(50, 50);
-      const shadowPlaneMat = new THREE.ShadowMaterial({ opacity: 0.3 });
+      const shadowPlaneMat = new THREE.ShadowMaterial({ opacity: 0.15 });  // Lighter shadows
       const shadowPlane = new THREE.Mesh(shadowPlaneGeom, shadowPlaneMat);
       shadowPlane.position.z = -5;
       shadowPlane.receiveShadow = true;
