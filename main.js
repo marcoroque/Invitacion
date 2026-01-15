@@ -42,7 +42,7 @@ if (!window.THREE) {
       this.animationSpeed = 0.1;
     }
     
-    load(textureLoader) {
+    load(textureLoader, maxAnisotropy = 16) {
       return new Promise((resolve, reject) => {
         console.log('Loading card', this.index, 'from', this.frontTexturePath);
         
@@ -55,6 +55,19 @@ if (!window.THREE) {
             // Function to complete card creation once we have back texture/material
             const createCard = (backMaterial, backTexture) => {
               const geometry = new THREE.PlaneGeometry(this.width, this.height);
+              
+              // Enable anisotropic filtering for sharper textures at angles (use GPU max)
+              frontTexture.anisotropy = maxAnisotropy;
+              frontTexture.minFilter = THREE.LinearMipmapLinearFilter;
+              frontTexture.magFilter = THREE.LinearFilter;
+              frontTexture.generateMipmaps = true;
+              
+              if (backTexture) {
+                backTexture.anisotropy = maxAnisotropy;
+                backTexture.minFilter = THREE.LinearMipmapLinearFilter;
+                backTexture.magFilter = THREE.LinearFilter;
+                backTexture.generateMipmaps = true;
+              }
               
               // Create front material
               const frontMaterial = new THREE.MeshStandardMaterial({
@@ -356,9 +369,9 @@ if (!window.THREE) {
       const cards = this.app.cards;
       const selectedIndex = this.app.selectedCardIndex;
       
-      // Position focused card in center
-      cards[selectedIndex].setPosition(0, 0, 2);
-      cards[selectedIndex].setScale(1.3);
+      // Position focused card in center, closer to camera for legibility
+      cards[selectedIndex].setPosition(0, 0, 5);
+      cards[selectedIndex].setScale(1.2);
       
       // Stack other cards at bottom of screen
       const stackSpacing = 0.1;
@@ -418,13 +431,23 @@ if (!window.THREE) {
       const canvas = document.getElementById('mycanvas');
       console.log('Canvas element:', canvas);
       
-      this.renderer = new THREE.WebGLRenderer({ canvas: canvas });
+      this.renderer = new THREE.WebGLRenderer({ 
+        canvas: canvas,
+        antialias: true,
+        alpha: true,
+        powerPreference: 'high-performance'
+      });
       this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 3));  // Up to 3x for high-DPI displays
       this.renderer.setClearColor(0xd4c4a8);  // More brown background
       this.renderer.setClearAlpha(1);
       this.renderer.sortObjects = true;
       this.renderer.shadowMap.enabled = true;
       this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      
+      // Store max anisotropy for textures
+      this.maxAnisotropy = this.renderer.capabilities.getMaxAnisotropy();
+      console.log('Max anisotropy:', this.maxAnisotropy);
       
       // Add lighting for shadows
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
@@ -433,8 +456,8 @@ if (!window.THREE) {
       const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
       directionalLight.position.set(5, 10, 7);
       directionalLight.castShadow = true;
-      directionalLight.shadow.mapSize.width = 2048;
-      directionalLight.shadow.mapSize.height = 2048;
+      directionalLight.shadow.mapSize.width = 4096;
+      directionalLight.shadow.mapSize.height = 4096;
       directionalLight.shadow.camera.near = 0.5;
       directionalLight.shadow.camera.far = 50;
       directionalLight.shadow.camera.left = -10;
@@ -543,7 +566,7 @@ if (!window.THREE) {
           hasThickness: config.hasThickness || false,
           edgeColor: config.edgeColor || null
         });
-        return card.load(this.textureLoader);
+        return card.load(this.textureLoader, this.maxAnisotropy);
       });
       
       this.cards = await Promise.all(loadPromises);
@@ -602,7 +625,7 @@ if (!window.THREE) {
   // Card configurations
   const cardConfigs = [
     { front: 'assets/cards/card1-front.png', back: 'assets/cards/card1-back.png', width: 3, height: 3, hasThickness: true, edgeColor: '#f5f5dc' },
-    { front: 'assets/cards/card2-front-1.png', back: 'assets/cards/card2-back-1.png', width: 3, height: 3 },
+    { front: 'assets/cards/card2-front-1.png', back: 'assets/cards/card2-back-1.png', width: 3, height: 3, hasThickness: true, edgeColor: '#f5f5dc' },
     { front: 'assets/cards/card3-front.png', backColor: '#fbf9f1', width: 3.49, height: 3.49, hasThickness: true },
     { front: 'assets/cards/card4-front.png', backColor: '#ffffff', width: 3.82, height: 3.82, hasThickness: true },
     { front: 'assets/cards/card5-front.png', backColor: '#ffcb87', width: 4.03, height: 5.73, hasThickness: true }
