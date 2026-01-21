@@ -1,0 +1,32 @@
+/* Add this to style.css */
+
+#language-toggle {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  width: 50px;
+  height: 50px;
+  background-color: rgba(217, 217, 217, 0.9);
+  border: 2px solid #d9d9d9;
+  border-radius: 8px;
+  font-family: 'Oblata', sans-serif;
+  font-size: 18px;
+  font-weight: bold;
+  color: #333;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#language-toggle:hover {
+  background-color: rgba(217, 217, 217, 1);
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+#language-toggle:active {
+  transform: scale(0.98);
+}

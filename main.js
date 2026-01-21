@@ -20,9 +20,10 @@ if (!window.THREE) {
       this.frontTexturePath = config.frontTexturePath || (config.front);
       this.backColor = config.backColor || null;
       this.backTexturePath = config.backTexturePath || (config.back) || null;
+      this.backImagePath = config.backImage || null;  // For QR codes on back
       this.hasThickness = config.hasThickness || false;
       this.edgeColor = config.edgeColor || null;  // For layered wavy edges
-      this.thickness = 0.05;
+      this.thickness = 0.12;
       
       // State
       this.isFrontFacing = true;
@@ -50,7 +51,7 @@ if (!window.THREE) {
       
       // Animation settings
       this.animationSpeed = 0.06;
-      this.flipSpeed = 0.03;  // Slower flip rotation
+      this.flipSpeed = 0.015;  // Slower flip rotation
       this.baseScale = 1;  // Base scale before pinch zoom
       this.pinchOffsetX = 0;  // Pinch zoom position offset
       this.pinchOffsetY = 0;
@@ -165,15 +166,73 @@ if (!window.THREE) {
                 }
               );
             } else {
-              // Use solid color
+              // Use solid color or solid color + back image
               const backTexture = this.createSolidColorTexture(this.backColor);
-              const backMaterial = new THREE.MeshStandardMaterial({
-                map: backTexture,
-                transparent: true,
-                alphaTest: 0.5,
-                depthWrite: true
-              });
-              createCard(backMaterial, null);
+              
+              // If there's a back image, load it as an overlay
+              if (this.backImagePath) {
+                textureLoader.load(
+                  this.backImagePath,
+                  (qrTexture) => {
+                    console.log('Card', this.index, 'back QR code loaded:', qrTexture);
+                    
+                    // Create a canvas that combines background color with QR code
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 512;
+                    canvas.height = 512;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Fill with background color
+                    ctx.fillStyle = this.backColor;
+                    ctx.fillRect(0, 0, 512, 512);
+                    
+                    // Get the QR image source
+                    const qrImage = qrTexture.source.data;
+                    console.log('QR image type:', qrImage.constructor.name);
+                    
+                    if (qrImage instanceof HTMLCanvasElement || qrImage instanceof HTMLImageElement) {
+                      // Center and scale the QR code
+                      const qrWidth = qrImage.width || 512;
+                      const qrHeight = qrImage.height || 512;
+                      const scale = 350 / Math.max(qrWidth, qrHeight);
+                      const scaledWidth = qrWidth * scale;
+                      const scaledHeight = qrHeight * scale;
+                      const x = (512 - scaledWidth) / 2;
+                      const y = (512 - scaledHeight) / 2;
+                      
+                      ctx.drawImage(qrImage, x, y, scaledWidth, scaledHeight);
+                      console.log('QR drawn at:', x, y, 'size:', scaledWidth, scaledHeight);
+                    }
+                    
+                    const compositeTexture = new THREE.CanvasTexture(canvas);
+                    const backMaterial = new THREE.MeshStandardMaterial({
+                      map: compositeTexture,
+                      depthWrite: true
+                    });
+                    createCard(backMaterial, null);
+                  },
+                  undefined,
+                  (error) => {
+                    console.error('Failed to load QR code for card', this.index, ':', error);
+                    // Fall back to solid color
+                    const backMaterial = new THREE.MeshStandardMaterial({
+                      map: backTexture,
+                      transparent: true,
+                      alphaTest: 0.5,
+                      depthWrite: true
+                    });
+                    createCard(backMaterial, null);
+                  }
+                );
+              } else {
+                const backMaterial = new THREE.MeshStandardMaterial({
+                  map: backTexture,
+                  transparent: true,
+                  alphaTest: 0.5,
+                  depthWrite: true
+                });
+                createCard(backMaterial, null);
+              }
             }
           },
           undefined,
@@ -186,33 +245,51 @@ if (!window.THREE) {
     }
     
     addEdges() {
-      const edgeMaterial = new THREE.MeshStandardMaterial({ color: this.backColor });
+      const edgeMaterial = new THREE.MeshStandardMaterial({ color: this.edgeColor || this.backColor });
+      const halfThickness = this.thickness / 2;
+      const edgeDepth = 0.005; // Minimal z-depth for edges
       
-      // Top edge
-      const topGeom = new THREE.BoxGeometry(this.width, this.thickness, this.thickness);
+      // Top edge (doesn't extend into corners)
+      const topGeom = new THREE.BoxGeometry(this.width - this.thickness, this.thickness, edgeDepth);
       const topEdge = new THREE.Mesh(topGeom, edgeMaterial);
-      topEdge.position.set(0, this.height / 2, 0);
+      topEdge.position.set(0, this.height / 2 - halfThickness, 0);
       topEdge.castShadow = true;
       this.group.add(topEdge);
       
       // Bottom edge
       const bottomEdge = new THREE.Mesh(topGeom, edgeMaterial);
-      bottomEdge.position.set(0, -this.height / 2, 0);
+      bottomEdge.position.set(0, -this.height / 2 + halfThickness, 0);
       bottomEdge.castShadow = true;
       this.group.add(bottomEdge);
       
-      // Left edge
-      const sideGeom = new THREE.BoxGeometry(this.thickness, this.height, this.thickness);
+      // Left edge (doesn't extend into corners)
+      const sideGeom = new THREE.BoxGeometry(this.thickness, this.height - this.thickness, edgeDepth);
       const leftEdge = new THREE.Mesh(sideGeom, edgeMaterial);
-      leftEdge.position.set(-this.width / 2, 0, 0);
+      leftEdge.position.set(-this.width / 2 + halfThickness, 0, 0);
       leftEdge.castShadow = true;
       this.group.add(leftEdge);
       
       // Right edge
       const rightEdge = new THREE.Mesh(sideGeom, edgeMaterial);
-      rightEdge.position.set(this.width / 2, 0, 0);
+      rightEdge.position.set(this.width / 2 - halfThickness, 0, 0);
       rightEdge.castShadow = true;
       this.group.add(rightEdge);
+      
+      // Corner pieces
+      const cornerGeom = new THREE.BoxGeometry(this.thickness, this.thickness, edgeDepth);
+      const corners = [
+        { x: -this.width / 2 + halfThickness, y: this.height / 2 - halfThickness },  // Top-left
+        { x: this.width / 2 - halfThickness, y: this.height / 2 - halfThickness },   // Top-right
+        { x: -this.width / 2 + halfThickness, y: -this.height / 2 + halfThickness }, // Bottom-left
+        { x: this.width / 2 - halfThickness, y: -this.height / 2 + halfThickness }   // Bottom-right
+      ];
+      
+      corners.forEach(corner => {
+        const cornerMesh = new THREE.Mesh(cornerGeom, edgeMaterial);
+        cornerMesh.position.set(corner.x, corner.y, 0);
+        cornerMesh.castShadow = true;
+        this.group.add(cornerMesh);
+      });
     }
     
     addLayeredEdges(frontTexture) {
@@ -501,6 +578,60 @@ if (!window.THREE) {
   class BaseView {
     constructor(app) {
       this.app = app;
+      this.instructionsEl = document.getElementById('instructions');
+      this.arrowLeftEl = document.getElementById('arrow-left');
+      this.arrowRightEl = document.getElementById('arrow-right');
+    }
+    
+    // Instruction strings for both languages
+    getInstructions() {
+      return {
+        espanol: {
+          clickCard: 'haz clic en la invitación',
+          chooseCard: 'elige una tarjeta',
+          clickToOpen: 'haz clic para abrir',
+          clickToFlip: 'haz clic para voltear',
+          slideLeftRight: 'desliza de lado a lado'
+        },
+        english: {
+          clickCard: 'click on the invitation',
+          chooseCard: 'choose a card',
+          clickToOpen: 'click to open',
+          clickToFlip: 'click to flip',
+          slideLeftRight: 'slide left to right'
+        }
+      };
+    }
+
+    getInstruction(key) {
+      const instructions = this.getInstructions();
+      const lang = this.app.currentLanguage;
+      return instructions[lang] ? instructions[lang][key] : instructions['espanol'][key];
+    }
+
+    updateInstructions(key, showArrows = false) {
+      const text = this.getInstruction(key);
+      
+      if (this.instructionsEl) {
+        this.instructionsEl.textContent = text;
+        if (text) {
+          this.instructionsEl.classList.add('visible');
+        } else {
+          this.instructionsEl.classList.remove('visible');
+        }
+      }
+      
+      if (this.arrowLeftEl && this.arrowRightEl) {
+        if (showArrows) {
+          this.arrowLeftEl.textContent = '←';
+          this.arrowRightEl.textContent = '→';
+          this.arrowLeftEl.classList.add('visible');
+          this.arrowRightEl.classList.add('visible');
+        } else {
+          this.arrowLeftEl.classList.remove('visible');
+          this.arrowRightEl.classList.remove('visible');
+        }
+      }
     }
     
     enter() {
@@ -527,6 +658,7 @@ if (!window.THREE) {
   class StackView extends BaseView {
     enter() {
       console.log('Entering StackView');
+      this.updateInstructions('clickCard');
       const cards = this.app.cards;
       const spacing = 0.15;
       
@@ -557,6 +689,7 @@ if (!window.THREE) {
   class SpreadView extends BaseView {
     enter() {
       console.log('Entering SpreadView');
+      this.updateInstructions('chooseCard');
       const cards = this.app.cards;
       // Tighter spacing so cards barely overlap (about 60% of average card width)
       const horizontalSpacing = 1.8;
@@ -668,6 +801,13 @@ if (!window.THREE) {
       const selectedIndex = this.app.selectedCardIndex;
       const selectedCard = cards[selectedIndex];
       
+      // Set instructions based on card type
+      if (selectedCard.isAccordion) {
+        this.updateInstructions('clickToOpen');
+      } else {
+        this.updateInstructions('clickToFlip');
+      }
+      
       // Reset accordion scroll
       this.accordionScrollOffset = 0;
       this.accordionVelocity = 0;
@@ -725,6 +865,20 @@ if (!window.THREE) {
         } else {
           selectedCard.setHoverTilt(0, 0);
           
+          // Edge scrolling: auto-scroll when mouse is near screen edges
+          const edgeThreshold = 0.15; // 15% from edge
+          const scrollSpeed = 0.08; // Pixels per frame
+          
+          if (this.app.mouseX < -1 + edgeThreshold) {
+            // Mouse near left edge - scroll right
+            const intensity = Math.abs(this.app.mouseX + 1) / edgeThreshold;
+            this.accordionScrollOffset = scrollSpeed * intensity;
+          } else if (this.app.mouseX > 1 - edgeThreshold) {
+            // Mouse near right edge - scroll left
+            const intensity = (this.app.mouseX - (1 - edgeThreshold)) / edgeThreshold;
+            this.accordionScrollOffset = -scrollSpeed * intensity;
+          }
+          
           // Apply accordion scroll offset with bounds and bounce
           if (selectedCard.accordionFaces && selectedCard.accordionFaces.length > 0) {
             const tiltAngle = 0.15;
@@ -741,9 +895,9 @@ if (!window.THREE) {
             selectedCard.accordionFaces.forEach((face, i) => {
               let newX = face.position.x + this.accordionScrollOffset;
               
-              // Bounce effect at edges - allow 0.6x totalWidth as buffer
+              // Bounce effect at edges - allow 0.35x totalWidth as buffer
               const faceTargetX = minX + i * spacing;
-              const bounceBuffer = totalWidth * 0.6; // 60% overscroll
+              const bounceBuffer = totalWidth * 0.35; // Reduced side buffer
               
               // If scrolling beyond bounds, apply resistance
               if (newX > faceTargetX + bounceBuffer) {
@@ -797,7 +951,7 @@ if (!window.THREE) {
       const selectedCard = this.app.cards[this.app.selectedCardIndex];
       if (selectedCard && selectedCard.accordionOpen) {
         // No buffer limits - allow free scrolling with bounce
-        this.accordionScrollOffset = deltaX * 0.01;
+        this.accordionScrollOffset = deltaX * 0.003;
       }
     }
 
@@ -819,8 +973,10 @@ if (!window.THREE) {
           if (selectedCard.isAccordion) {
             if (selectedCard.accordionOpen) {
               selectedCard.closeAccordion();
+              this.updateInstructions('clickToOpen');
             } else {
               selectedCard.openAccordion();
+              this.updateInstructions('slideLeftRight', true);
             }
           } else {
             // Regular card - flip it
@@ -1044,6 +1200,24 @@ if (!window.THREE) {
         e.preventDefault();
       }, { passive: false });
       
+      // Wheel event for trackpad/mouse wheel scrolling
+      window.addEventListener('wheel', (e) => {
+        // Check if accordion is open in focus view
+        if (this.currentView && this.currentView.constructor.name === 'FocusView') {
+          const selectedCard = this.cards[this.selectedCardIndex];
+          if (selectedCard && selectedCard.accordionOpen) {
+            // Use horizontal scroll (deltaX) for accordion
+            if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) {
+              // Horizontal scroll detected
+              if (this.currentView.onSwipe) {
+                this.currentView.onSwipe(-e.deltaX);
+              }
+              e.preventDefault();
+            }
+          }
+        }
+      }, { passive: false });
+      
       // Resize
       window.addEventListener('resize', () => {
         this.camera.aspect = window.innerWidth / window.innerHeight;
@@ -1199,6 +1373,68 @@ if (!window.THREE) {
       };
       animate();
     }
+
+    changeLanguage(newLanguage) {
+      this.currentLanguage = newLanguage;
+      localStorage.setItem('invitationLanguage', newLanguage);
+      
+      // Update toggle button text
+      const toggleBtn = document.getElementById('language-toggle');
+      if (toggleBtn) {
+        toggleBtn.textContent = newLanguage === 'espanol' ? 'ES' : 'EN';
+      }
+      
+      // Update language label (shows opposite language)
+      const labelEl = document.getElementById('language-label');
+      if (labelEl) {
+        labelEl.textContent = newLanguage === 'espanol' ? 'language' : 'idioma';
+      }
+      
+      // Store current view name before reloading
+      const currentViewName = Object.keys(this.views).find(key => this.views[key] === this.currentView) || 'stack';
+      
+      // Exit current view to reset state
+      if (this.currentView) {
+        this.currentView.exit();
+      }
+      
+      // Reload cards with new language paths
+      const langPath = newLanguage === 'espanol' ? 'espanol' : 'english';
+      
+      const newCardConfigs = [
+        { front: `assets/cards/${langPath}/card1-front.png`, back: `assets/cards/${langPath}/card1-back.png`, width: 3, height: 3, hasThickness: true, edgeColor: '#f5f5dc' },
+        { 
+          isAccordion: true,
+          width: 3,
+          height: 3,
+          hasThickness: true,
+          edgeColor: '#f5f5dc',
+          faces: [
+            { front: `assets/cards/${langPath}/card2-front-1.png`, back: `assets/cards/${langPath}/card2-back-1.png` },
+            { front: `assets/cards/${langPath}/card2-front-2.png`, back: `assets/cards/${langPath}/card2-back-2.png` },
+            { front: `assets/cards/${langPath}/card2-front-3.png`, backColor: '#ddf3e2' },
+            { front: `assets/cards/${langPath}/card2-front-4.png`, backColor: '#ddf3e2' },
+            { front: `assets/cards/${langPath}/card2-front-5.png`, backColor: '#ddf3e2' },
+            { front: `assets/cards/${langPath}/card2-front-6.png`, backColor: '#ddf3e2' }
+          ]
+        },
+        { front: `assets/cards/${langPath}/card3-front.png`, backColor: '#e595ab', backImage: 'assets/QR_code.png', width: 3.49, height: 3.49, hasThickness: true, edgeColor: '#fbf7ef' },
+        { front: `assets/cards/${langPath}/card4-front.png`, backColor: '#4281bb', backImage: 'assets/QR_code.png', width: 3.82, height: 3.82, hasThickness: true, edgeColor: '#fbf7ef' },
+        { front: `assets/cards/${langPath}/card5-front.png`, backColor: '#ffcb87', width: 4.03, height: 5.73, hasThickness: true, edgeColor: '#fbf7ef' }
+      ];
+      
+      // Remove old cards from scene
+      for (const card of this.cards) {
+        this.scene.remove(card.group);
+      }
+      
+      // Load new cards
+      this.loadCards(newCardConfigs).then(() => {
+        console.log(`Language changed to ${newLanguage}`);
+        // Restore the view after cards are loaded
+        this.setView(currentViewName);
+      });
+    }
   }
 
   // ============================================
@@ -1206,9 +1442,15 @@ if (!window.THREE) {
   // ============================================
   const app = new App();
   
-  // Card configurations
+  // Restore language preference from localStorage or default to Spanish
+  const savedLanguage = localStorage.getItem('invitationLanguage') || 'espanol';
+  app.currentLanguage = savedLanguage;
+  
+  // Card configurations with language variable
+  const langPath = savedLanguage === 'espanol' ? 'espanol' : 'english';
+  
   const cardConfigs = [
-    { front: 'assets/cards/card1-front.png', back: 'assets/cards/card1-back.png', width: 3, height: 3, hasThickness: true, edgeColor: '#f5f5dc' },
+    { front: `assets/cards/${langPath}/card1-front.png`, back: `assets/cards/${langPath}/card1-back.png`, width: 3, height: 3, hasThickness: true, edgeColor: '#f5f5dc' },
     { 
       isAccordion: true,
       width: 3,
@@ -1216,17 +1458,17 @@ if (!window.THREE) {
       hasThickness: true,
       edgeColor: '#f5f5dc',
       faces: [
-        { front: 'assets/cards/card2-front-1.png', back: 'assets/cards/card2-back-1.png' },
-        { front: 'assets/cards/card2-front-2.png', back: 'assets/cards/card2-back-2.png' },
-        { front: 'assets/cards/card2-front-3.png', backColor: '#ddf3e2' },
-        { front: 'assets/cards/card2-front-4.png', backColor: '#ddf3e2' },
-        { front: 'assets/cards/card2-front-5.png', backColor: '#ddf3e2' },
-        { front: 'assets/cards/card2-front-6.png', backColor: '#ddf3e2' }
+        { front: `assets/cards/${langPath}/card2-front-1.png`, back: `assets/cards/${langPath}/card2-back-1.png` },
+        { front: `assets/cards/${langPath}/card2-front-2.png`, back: `assets/cards/${langPath}/card2-back-2.png` },
+        { front: `assets/cards/${langPath}/card2-front-3.png`, backColor: '#ddf3e2' },
+        { front: `assets/cards/${langPath}/card2-front-4.png`, backColor: '#ddf3e2' },
+        { front: `assets/cards/${langPath}/card2-front-5.png`, backColor: '#ddf3e2' },
+        { front: `assets/cards/${langPath}/card2-front-6.png`, backColor: '#ddf3e2' }
       ]
     },
-    { front: 'assets/cards/card3-front.png', backColor: '#fbf9f1', width: 3.49, height: 3.49, hasThickness: true },
-    { front: 'assets/cards/card4-front.png', backColor: '#ffffff', width: 3.82, height: 3.82, hasThickness: true },
-    { front: 'assets/cards/card5-front.png', backColor: '#ffcb87', width: 4.03, height: 5.73, hasThickness: true }
+    { front: `assets/cards/${langPath}/card3-front.png`, backColor: '#e595ab', backImage: 'assets/QR_code.png', width: 3.49, height: 3.49, hasThickness: true, edgeColor: '#fbf7ef' },
+    { front: `assets/cards/${langPath}/card4-front.png`, backColor: '#4281bb', backImage: 'assets/QR_code.png', width: 3.82, height: 3.82, hasThickness: true, edgeColor: '#fbf7ef' },
+    { front: `assets/cards/${langPath}/card5-front.png`, backColor: '#ffcb87', width: 4.03, height: 5.73, hasThickness: true, edgeColor: '#fbf7ef' }
   ];
   
   // Load cards and start
@@ -1240,6 +1482,20 @@ if (!window.THREE) {
   
   // Start rendering immediately even before cards load
   app.run();
+  
+  // Setup language toggle
+  const languageToggle = document.getElementById('language-toggle');
+  const languageLabel = document.getElementById('language-label');
+  if (languageToggle) {
+    languageToggle.textContent = app.currentLanguage === 'espanol' ? 'ES' : 'EN';
+    if (languageLabel) {
+      languageLabel.textContent = app.currentLanguage === 'espanol' ? 'language' : 'idioma';
+    }
+    languageToggle.addEventListener('click', () => {
+      const newLanguage = app.currentLanguage === 'espanol' ? 'english' : 'espanol';
+      app.changeLanguage(newLanguage);
+    });
+  }
 }
 
 

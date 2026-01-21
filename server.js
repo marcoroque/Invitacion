@@ -1,4 +1,4 @@
-﻿const http = require('http');
+const http = require('http');
 const fs = require('fs');
 const path = require('path');
 
@@ -38,7 +38,7 @@ const server = http.createServer((req, res) => {
         }
       } else {
         // Add no-cache headers to prevent browser caching
-        res.writeHead(200, { 
+        res.writeHead(200, {
           'Content-Type': contentType,
           'Cache-Control': 'no-cache, no-store, must-revalidate',
           'Pragma': 'no-cache',
@@ -59,7 +59,8 @@ server.on('error', (err) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(Server running at http://localhost:/);
-  console.log(Open browser at: http://localhost:/);
+  console.log(`Server running at http://localhost:${PORT}/`);
+  console.log(`Open browser at: http://localhost:${PORT}/`);
   console.log('Press Ctrl+C to stop the server');
 });
+

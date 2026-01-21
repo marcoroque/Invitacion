@@ -9,17 +9,27 @@
 <body>
   <!-- YouTube Video Background -->
   <div id="video-background">
-    <iframe 
+    <iframe
       id="bg-video"
       src="https://www.youtube.com/embed/Xn8tufsbSz0?start=0&end=1153&autoplay=1&mute=1&loop=1&playlist=Xn8tufsbSz0&controls=0&showinfo=0&rel=0&modestbranding=1&playsinline=1"
-      frameborder="0" 
+      frameborder="0"
       allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
       allowfullscreen>
     </iframe>
   </div>
-  
+
   <canvas id="mycanvas"></canvas>
-  <div id="info">Click cards to fan them out. Hover to rotate.</div>
+
+  <!-- Language Toggle -->
+  <div id="language-container">
+    <button id="language-toggle" class="language-toggle">ES</button>
+    <div id="language-label" class="language-label">language</div>
+  </div>
+
+  <!-- Instructions -->
+  <div id="instructions"></div>
+  <div id="arrow-left" class="scroll-arrow"></div>
+  <div id="arrow-right" class="scroll-arrow"></div>
 
   <!-- Three.js -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
